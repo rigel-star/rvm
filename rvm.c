@@ -124,39 +124,39 @@ void ldi(uint16_t instr)
 }
 
 
-// enum
-// {
-// 	TRAP_GETC = 0x20,  /* get character from keyboard, not echoed onto the terminal */
-// 	TRAP_OUT = 0x21,   /* output a character */
-// 	TRAP_PUTS = 0x22,  /* output a word string */
-// 	TRAP_IN = 0x23,    /* get character from keyboard, echoed onto the terminal */
-// 	TRAP_PUTSP = 0x24, /* output a byte string */
-// 	TRAP_HALT = 0x25,   halt the program 
-// 	TRAP_COUNT = 0x6
-// };
+enum
+{
+	TRAP_GETC = 0x20,  /* get character from keyboard, not echoed onto the terminal */
+	TRAP_OUT = 0x21,   /* output a character */
+	TRAP_PUTS = 0x22,  /* output a word string */
+	TRAP_IN = 0x23,    /* get character from keyboard, echoed onto the terminal */
+	TRAP_PUTSP = 0x24, /* output a byte string */
+	TRAP_HALT = 0x25,  /* halt the program */
+	TRAP_COUNT = 0x6
+};
 
-// void trap_puts()
-// {
-// 	puts("Hello world");
-// }
-
-
-// void trap_getc(uint16_t instr)
-// {
-// }
+void trap_puts(uint16_t instr)
+{
+	puts("Hello world");
+}
 
 
-// typedef struct
-// {
-// 	char *name;
-// 	void (*trap_handler)(uint16_t);
-// } Trap_Def;
+void trap_getc(uint16_t instr)
+{
+}
 
 
-// Trap_Def trap_loopup_table[TRAP_COUNT] = {
-// 	[TRAP_GETC] = {.name = "getc", .trap_handler = trap_getc},
-// 	[TRAP_PUTS] = {.name = "puts", .trap_handler = trap_puts}
-// };
+typedef struct
+{
+	char *name;
+	void (*trap_handler)(uint16_t);
+} Trap_Def;
+
+
+Trap_Def trap_loopup_table[TRAP_COUNT] = {
+	[TRAP_GETC % 0x20] = {.name = "getc", .trap_handler = trap_getc},
+	[TRAP_PUTS % 0x20] = {.name = "puts", .trap_handler = trap_puts}
+};
 
 
 typedef struct 
@@ -180,41 +180,35 @@ Instr_Def instr_lokup_table[OP_COUNT] =
 
 int main(void)
 {
-    int a = 45;
-    int *p = &a;
+    reg[R_COND] = FL_ZRO;
 
-    printf("Result: %p\n", p);
+    enum { PC_START = 0x3000 };
+    reg[R_PC] = PC_START;
 
- //    reg[R_COND] = FL_ZRO;
+    reg[R_R0] = 4;
+    memory[PC_START] = (OP_ADD << 12) | (R_R0 << 9) | (R_R0 << 6) | (1 << 5) | 3; // add instruction
 
- //    enum { PC_START = 0x3000 };
- //    reg[R_PC] = PC_START;
+    uint8_t no_of_instr = 1;
+    uint8_t i = 0;
 
-	// //memory[0x3000] = (0xFF << 12) | (TRAP_PUTS << 8);
- //    //memory[0x3001] = (OP_ADD << 12) | (R_R0 << 9);
+    while(i < no_of_instr)
+    {
+        uint16_t instr = memory[reg[R_PC]++];
+        uint16_t op = instr >> 12;
 
- //    uint8_t no_of_instr = 2;
- //    uint8_t i = 0;
+        if(op < OP_COUNT)
+        {
 
- //    while(i < no_of_instr)
- //    {
- //        uint16_t instr = memory[reg[R_PC]++];
- //        uint16_t op = instr >> 12;
+            printf("Name: %s | Opcode: %d\n", instr_lokup_table[op].name, op);
+            instr_lokup_table[op].function(instr);
+        }
+        else
+        {
+            printf("No instruction found with opcode %d\n", op);
+        }
+        i++;
+    }
 
- //        if(op < OP_COUNT)
- //        {
-
- //            printf("Name: %s | Opcode: %d\n", instr_lokup_table[op].name, op);
- //            instr_lokup_table[op].function(instr);
- //        }
- //        else
- //        {
- //            printf("No instruction found with opcode %d\n", op);
- //        }
- //        i++;
- //    }
-
-    
-
+    printf("4 + 3 = %d\n", reg[R_R0]);
     return 0;
 }
