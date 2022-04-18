@@ -1,7 +1,7 @@
 #include <stdint.h>
 #include <stdio.h>
 #include <string.h>
-
+//this is noob programming
 enum
 {
 	R_R0 = 0,
