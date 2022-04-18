@@ -1,7 +1,7 @@
 #include <stdint.h>
 #include <stdio.h>
 #include <string.h>
-
+//this is noob programming
 enum
 {
 	R_R0 = 0,
@@ -135,27 +135,44 @@ enum
 	TRAP_COUNT = 0x6
 };
 
-void trap_puts(uint16_t instr)
+
+void trap_puts()
 {
-	puts("Hello world");
+	uint16_t *str = memory + reg[R_R0];
+	while(*str)
+	{
+		putc((char) *str, stdout);
+		str++;
+	}
+	fflush(stdout);
 }
 
 
-void trap_getc(uint16_t instr)
+void trap_getc()
 {
+	reg[R_R0] = (uint16_t) getchar();
+	update_flags(R_R0);
+}
+
+
+void trap_out()
+{
+	putc((char) reg[R_R0], stdout);
 }
 
 
 typedef struct
 {
 	char *name;
-	void (*trap_handler)(uint16_t);
+	void (*trap_handler)();
 } Trap_Def;
 
 
-Trap_Def trap_loopup_table[TRAP_COUNT] = {
+Trap_Def trap_lookup_table[TRAP_COUNT] = {
 	[TRAP_GETC % 0x20] = {.name = "getc", .trap_handler = trap_getc},
-	[TRAP_PUTS % 0x20] = {.name = "puts", .trap_handler = trap_puts}
+	[TRAP_PUTS % 0x20] = {.name = "puts", .trap_handler = trap_puts},
+	[TRAP_OUT % 0x20] = {.name = "out", .trap_handler = trap_out},
+
 };
 
 
@@ -171,7 +188,7 @@ typedef struct
 //     [OP_LDI] = ldi
 // };
 
-Instr_Def instr_lokup_table[OP_COUNT] = 
+Instr_Def instr_lookup_table[OP_COUNT] = 
 {
     [OP_ADD] = {.name = "add", .function = add},
     [OP_LDI] = {.name = "ldi", .function = ldi}
@@ -185,10 +202,27 @@ int main(void)
     enum { PC_START = 0x3000 };
     reg[R_PC] = PC_START;
 
-    reg[R_R0] = 4;
-    memory[PC_START] = (OP_ADD << 12) | (R_R0 << 9) | (R_R0 << 6) | (1 << 5) | 3; // add instruction
+	memory[0x4000] = 'H';
+	memory[0x4001] = 'e';
+	memory[0x4002] = 'l';
+	memory[0x4003] = 'l';
+	memory[0x4004] = 'o';
+	memory[0x4005] = ' ';
+	memory[0x4006] = 'w';
+	memory[0x4007] = 'o';
+	memory[0x4008] = 'r';
+	memory[0x4009] = 'l';
+	memory[0x400a] = 'd';
+	memory[0x400b] = '\n';
+	memory[0x400c] = '\0';
 
-    uint8_t no_of_instr = 1;
+	reg[R_R0] = 0x4000;
+
+	memory[PC_START] = (0xF0 << 8) | TRAP_GETC;
+	memory[PC_START + 1] = (0xF0 << 8) | TRAP_OUT;
+	// memory[PC_START + 1] = (OP_ADD << 12) | (R_R0 << 9) | (R_R0 << 6) | (1 << 5) | 3; // add instruction
+
+    uint8_t no_of_instr = 2;
     uint8_t i = 0;
 
     while(i < no_of_instr)
@@ -198,9 +232,17 @@ int main(void)
 
         if(op < OP_COUNT)
         {
-
-            printf("Name: %s | Opcode: %d\n", instr_lokup_table[op].name, op);
-            instr_lokup_table[op].function(instr);
+			if((instr & 0xFF00) == 0xF000)
+			{
+				uint16_t trap_code = (instr & 0xFF);
+            	printf("Trap: %s | Trapcode: %d\n", trap_lookup_table[trap_code % 0x20].name, op);
+				trap_lookup_table[trap_code % 0x20].trap_handler();
+			}
+			else
+			{
+            	printf("Name: %s | Opcode: %d\n", instr_lookup_table[op].name, op);
+            	instr_lookup_table[op].function(instr);
+			}
         }
         else
         {
@@ -208,7 +250,5 @@ int main(void)
         }
         i++;
     }
-
-    printf("4 + 3 = %d\n", reg[R_R0]);
     return 0;
 }
