@@ -1,2 +1,2 @@
 # rvm
-LC3 VM
+LC3 VM written in C.
