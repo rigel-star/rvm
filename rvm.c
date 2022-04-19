@@ -231,7 +231,6 @@ Trap_Def trap_lookup_table[TRAP_COUNT] = {
 	[TRAP_GETC % 0x20] = {.name = "getc", .trap_handler = trap_getc},
 	[TRAP_PUTS % 0x20] = {.name = "puts", .trap_handler = trap_puts},
 	[TRAP_OUT % 0x20] = {.name = "out", .trap_handler = trap_out},
-
 };
 
 
@@ -280,38 +279,34 @@ int main(void)
 	memory[PC_START] = (0xF0 << 8) | TRAP_PUTS;
 	// memory[PC_START + 1] = (0xF0 << 8) | TRAP_OUT;
 	// memory[PC_START + 1] = (OP_ADD << 12) | (R_R0 << 9) | (R_R0 << 6) | (1 << 5) | 3; // add instruction
-    memory[PC_START + 1] = OP_HALT;
+    memory[PC_START + 1] = (0xF0 << 8) | OP_HALT;
 
     uint8_t running = 1;
     while(running)
     {
-        puts("Going round and round");
         uint16_t instr = memory[reg[R_PC]++];
         uint16_t op = instr >> 12;
 
-        if(op < OP_COUNT)
+        // if instruction is a trap
+        if((instr & 0xF000) == 0xF000)
         {
-			if((instr & 0xFF00) == 0xF000)
-			{
-				uint16_t trap_code = (instr & 0xFF);
-            	printf("Trap: %s | Trapcode: %d\n", trap_lookup_table[trap_code % 0x20].name, op);
-				trap_lookup_table[trap_code % 0x20].trap_handler();
-			}
-            else if(instr == OP_HALT)
+            uint16_t trap_code = (instr & 0xFF);
+            // printf("Trap: %s | Trapcode: %d\n", trap_lookup_table[trap_code % 0x20].name, op);
+            
+            if(trap_code == OP_HALT)
             {
-                puts("HALT");
+                puts("[HALT]");
                 fflush(stdout);
                 running = 0;
             }
-			else
-			{
-            	printf("Name: %s | Opcode: %d\n", instr_lookup_table[op].name, op);
-            	instr_lookup_table[op].function(instr);
-			}
+            else 
+                trap_lookup_table[trap_code % 0x20].trap_handler();
         }
+        // if instruction is opcode 
         else
         {
-            printf("No instruction found with opcode %d\n", op);
+            // printf("Name: %s | Opcode: %d\n", instr_lookup_table[op].name, op);
+            instr_lookup_table[op].function(instr);
         }
     }
     return 0;
