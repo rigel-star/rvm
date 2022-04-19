@@ -1,6 +1,7 @@
 #include <stdint.h>
 #include <stdio.h>
 #include <string.h>
+
 #include <sys/fcntl.h>
 #include <unistd.h>
 
@@ -205,7 +206,6 @@ void trap_putsp()
     fflush(stdout);
 }
 
-
 void trap_getc()
 {
 	reg[R_R0] = (uint16_t) getchar();
@@ -216,7 +216,7 @@ void trap_getc()
 void trap_out()
 {
 	putc((char) reg[R_R0], stdout);
-    fflush(stdout);
+  fflush(stdout);
 }
 
 
@@ -275,7 +275,7 @@ int main(void)
 	memory[0x400c] = '\0';
 
 	reg[R_R0] = 0x4000;
-
+  
 	memory[PC_START] = (0xF0 << 8) | TRAP_PUTS;
 	// memory[PC_START + 1] = (0xF0 << 8) | TRAP_OUT;
 	// memory[PC_START + 1] = (OP_ADD << 12) | (R_R0 << 9) | (R_R0 << 6) | (1 << 5) | 3; // add instruction
