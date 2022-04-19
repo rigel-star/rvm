@@ -1,6 +1,9 @@
 #include <stdint.h>
 #include <stdio.h>
 #include <string.h>
+#include <sys/fcntl.h>
+#include <unistd.h>
+
 //this is noob programming
 enum
 {
@@ -35,8 +38,8 @@ enum
     OP_RES,    /* reserved (unused) */
     OP_LEA,    /* load effective address */
     OP_TRAP,   /* execute trap */
+    OP_HALT,   /* halt the program */
     OP_COUNT,  /* count opcodes */
-    OP_OK
 };
 
 enum
@@ -46,10 +49,35 @@ enum
     FL_NEG = 1 << 2, /* N */
 };
 
+enum
+{
+    MR_KBSR = 0xFE00, /* keyboard status */
+    MR_KBDR = 0xFE02  /* keyboard data */
+};
+
 #define MEMORY_MAX (1 << 16) 
 
 
 uint16_t memory[MEMORY_MAX];
+
+uint16_t swap16(uint16_t x)
+{
+    return (x << 8) | (x >> 8);
+}
+
+
+uint16_t check_key()
+{
+    fd_set readfds;
+    FD_ZERO(&readfds);
+    FD_SET(STDIN_FILENO, &readfds);
+
+    struct timeval timeout;
+    timeout.tv_sec = 0;
+    timeout.tv_usec = 0;
+    return select(1, &readfds, NULL, NULL, &timeout) != 0;
+}
+
 
 void mem_write(uint16_t address, uint16_t val)
 {
@@ -59,6 +87,18 @@ void mem_write(uint16_t address, uint16_t val)
 
 uint16_t mem_read(uint16_t address)
 {
+    if (address == MR_KBSR)
+    {
+        if (check_key())
+        {
+            memory[MR_KBSR] = (1 << 15);
+            memory[MR_KBDR] = getchar();
+        }
+        else
+        {
+            memory[MR_KBSR] = 0;
+        }
+    }
     return memory[address];
 }
 
@@ -135,27 +175,62 @@ enum
 	TRAP_COUNT = 0x6
 };
 
-void trap_puts(uint16_t instr)
+
+void trap_puts()
 {
-	puts("Hello world");
+	uint16_t *str = memory + reg[R_R0];
+	while(*str)
+	{
+		putc((char) *str, stdout);
+		str++;
+	}
+	fflush(stdout);
 }
 
 
-void trap_getc(uint16_t instr)
+void trap_putsp()
 {
+    uint16_t *str = memory + reg[R_R0];
+    while(*str)
+    {
+        char char1 = (*str) & 0xFF;
+        putc(char1, stdout);
+
+        char char2 = (*str) >> 8;
+        if(char2)
+            putc(char2, stdout);
+
+        str++;
+    }
+    fflush(stdout);
+}
+
+
+void trap_getc()
+{
+	reg[R_R0] = (uint16_t) getchar();
+	update_flags(R_R0);
+}
+
+
+void trap_out()
+{
+	putc((char) reg[R_R0], stdout);
+    fflush(stdout);
 }
 
 
 typedef struct
 {
 	char *name;
-	void (*trap_handler)(uint16_t);
+	void (*trap_handler)();
 } Trap_Def;
 
 
-Trap_Def trap_loopup_table[TRAP_COUNT] = {
+Trap_Def trap_lookup_table[TRAP_COUNT] = {
 	[TRAP_GETC % 0x20] = {.name = "getc", .trap_handler = trap_getc},
-	[TRAP_PUTS % 0x20] = {.name = "puts", .trap_handler = trap_puts}
+	[TRAP_PUTS % 0x20] = {.name = "puts", .trap_handler = trap_puts},
+	[TRAP_OUT % 0x20] = {.name = "out", .trap_handler = trap_out},
 };
 
 
@@ -171,7 +246,7 @@ typedef struct
 //     [OP_LDI] = ldi
 // };
 
-Instr_Def instr_lokup_table[OP_COUNT] = 
+Instr_Def instr_lookup_table[OP_COUNT] = 
 {
     [OP_ADD] = {.name = "add", .function = add},
     [OP_LDI] = {.name = "ldi", .function = ldi}
@@ -185,30 +260,54 @@ int main(void)
     enum { PC_START = 0x3000 };
     reg[R_PC] = PC_START;
 
-    reg[R_R0] = 4;
-    memory[PC_START] = (OP_ADD << 12) | (R_R0 << 9) | (R_R0 << 6) | (1 << 5) | 3; // add instruction
+	memory[0x4000] = 'H';
+	memory[0x4001] = 'e';
+	memory[0x4002] = 'l';
+	memory[0x4003] = 'l';
+	memory[0x4004] = 'o';
+	memory[0x4005] = ' ';
+	memory[0x4006] = 'w';
+	memory[0x4007] = 'o';
+	memory[0x4008] = 'r';
+	memory[0x4009] = 'l';
+	memory[0x400a] = 'd';
+	memory[0x400b] = '\n';
+	memory[0x400c] = '\0';
 
-    uint8_t no_of_instr = 1;
-    uint8_t i = 0;
+	reg[R_R0] = 0x4000;
 
-    while(i < no_of_instr)
+	memory[PC_START] = (0xF0 << 8) | TRAP_PUTS;
+	// memory[PC_START + 1] = (0xF0 << 8) | TRAP_OUT;
+	// memory[PC_START + 1] = (OP_ADD << 12) | (R_R0 << 9) | (R_R0 << 6) | (1 << 5) | 3; // add instruction
+    memory[PC_START + 1] = (0xF0 << 8) | OP_HALT;
+
+    uint8_t running = 1;
+    while(running)
     {
         uint16_t instr = memory[reg[R_PC]++];
         uint16_t op = instr >> 12;
 
-        if(op < OP_COUNT)
+        // if instruction is a trap
+        if((instr & 0xF000) == 0xF000)
         {
-
-            printf("Name: %s | Opcode: %d\n", instr_lokup_table[op].name, op);
-            instr_lokup_table[op].function(instr);
+            uint16_t trap_code = (instr & 0xFF);
+            // printf("Trap: %s | Trapcode: %d\n", trap_lookup_table[trap_code % 0x20].name, op);
+            
+            if(trap_code == OP_HALT)
+            {
+                puts("[HALT]");
+                fflush(stdout);
+                running = 0;
+            }
+            else 
+                trap_lookup_table[trap_code % 0x20].trap_handler();
         }
+        // if instruction is opcode 
         else
         {
-            printf("No instruction found with opcode %d\n", op);
+            // printf("Name: %s | Opcode: %d\n", instr_lookup_table[op].name, op);
+            instr_lookup_table[op].function(instr);
         }
-        i++;
     }
-
-    printf("4 + 3 = %d\n", reg[R_R0]);
     return 0;
 }
