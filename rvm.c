@@ -152,6 +152,37 @@ void add(uint16_t instr)
 }
 
 
+void and(uint16_t instr)
+{
+    uint16_t r0 = (instr >> 9) & 0x7;
+    uint16_t r1 = (instr >> 6) & 0x7;
+    uint16_t imm_flag = (instr >> 5) & 0x1;
+
+    if(imm_flag)
+    {
+        uint16_t imm5 = sign_extend(instr & 0x1F, 5);
+        reg[r0] = reg[r1] & imm5;
+    }
+    else
+    {
+        uint16_t r2 = instr & 0x7;
+        reg[r0] = reg[r1] & reg[r2];
+    }
+
+    update_flags(r0);
+}
+
+
+void not(uint16_t instr)
+{
+    uint16_t r0 = (instr >> 9) & 0x7;
+    uint16_t r1 = (instr >> 6) & 0x7;
+
+    reg[r0] = ~reg[r1];
+    update_flags(r0);
+}
+
+
 void ldi(uint16_t instr)
 {
     uint16_t r0 = (instr >> 9) & 0x7;
@@ -205,7 +236,6 @@ void trap_putsp()
     fflush(stdout);
 }
 
-
 void trap_getc()
 {
 	reg[R_R0] = (uint16_t) getchar();
@@ -249,7 +279,8 @@ typedef struct
 Instr_Def instr_lookup_table[OP_COUNT] = 
 {
     [OP_ADD] = {.name = "add", .function = add},
-    [OP_LDI] = {.name = "ldi", .function = ldi}
+    [OP_LDI] = {.name = "ldi", .function = ldi},
+    [OP_AND] = {.name = "and", .function = and}
 };
 
 
@@ -274,12 +305,12 @@ int main(void)
 	memory[0x400b] = '\n';
 	memory[0x400c] = '\0';
 
-	reg[R_R0] = 0x4000;
+	reg[R_R0] = 3;
 
-	memory[PC_START] = (0xF0 << 8) | TRAP_PUTS;
-	// memory[PC_START + 1] = (0xF0 << 8) | TRAP_OUT;
-	// memory[PC_START + 1] = (OP_ADD << 12) | (R_R0 << 9) | (R_R0 << 6) | (1 << 5) | 3; // add instruction
-    memory[PC_START + 1] = (0xF0 << 8) | OP_HALT;
+    memory[PC_START] = (OP_AND << 12) | (R_R0 << 9) | (R_R0 << 6) | (1 << 5) | 2; // and    
+    // memory[PC_START] = (OP_ADD << 12) | (R_R0 << 9) | (R_R0 << 6) | (1 << 5) | '0';
+    memory[PC_START + 1] = (0xF0 << 8) | TRAP_OUT;
+    memory[PC_START + 2] = (0xF0 << 8) | TRAP_HALT;
 
     uint8_t running = 1;
     while(running)
@@ -293,7 +324,7 @@ int main(void)
             uint16_t trap_code = (instr & 0xFF);
             // printf("Trap: %s | Trapcode: %d\n", trap_lookup_table[trap_code % 0x20].name, op);
             
-            if(trap_code == OP_HALT)
+            if(trap_code == TRAP_HALT)
             {
                 puts("[HALT]");
                 fflush(stdout);
