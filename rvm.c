@@ -22,7 +22,7 @@ enum
 
 enum
 {
-	OP_BR = 0, /* branch */
+	OP_BR, /* branch */
     OP_ADD,    /* add  */
     OP_LD,     /* load */
     OP_ST,     /* store */
@@ -105,7 +105,8 @@ uint16_t mem_read(uint16_t address)
 uint16_t reg[R_COUNT];
 
 
-uint16_t sign_extend(uint16_t x, int bit_count)
+// sign extend
+uint16_t sext(uint16_t x, int bit_count)
 {
     if ((x >> (bit_count - 1)) & 1) {
         x |= (0xFFFF << bit_count);
@@ -139,7 +140,7 @@ void add(uint16_t instr)
 
     if(imm_flag)
     {
-        uint16_t imm5 = sign_extend(instr & 0x1F, 5);
+        uint16_t imm5 = sext(instr & 0x1F, 5);
         reg[r0] = reg[r1] + imm5;
     }
     else
@@ -160,7 +161,7 @@ void and(uint16_t instr)
 
     if(imm_flag)
     {
-        uint16_t imm5 = sign_extend(instr & 0x1F, 5);
+        uint16_t imm5 = sext(instr & 0x1F, 5);
         reg[r0] = reg[r1] & imm5;
     }
     else
@@ -186,12 +187,114 @@ void not(uint16_t instr)
 void ldi(uint16_t instr)
 {
     uint16_t r0 = (instr >> 9) & 0x7;
-    uint16_t offset = sign_extend(instr & 0x1FF, 9);
+    uint16_t offset = sext(instr & 0x1FF, 9);
 
     reg[r0] = mem_read(reg[R_PC] + offset);
 	printf("%d\n", reg[r0]);
 
     update_flags(r0);
+}
+
+
+void br(uint16_t instr)
+{
+    uint16_t pc_offset = sext(instr & 0x1FF, 9);
+    uint16_t cond_flag = (instr >> 9) & 0x7;
+    if (cond_flag & reg[R_COND])
+    {
+        reg[R_PC] += pc_offset;
+    }
+}
+
+
+void jmp(uint16_t instr)
+{
+    uint16_t r1 = (instr >> 6) & 0x7;
+    reg[R_PC] = reg[r1];
+}
+
+
+void jsr(uint16_t instr)
+{
+    uint16_t long_flag = (instr >> 11) & 1;
+    reg[R_R7] = reg[R_PC];
+    if (long_flag)
+    {
+        uint16_t long_pc_offset = sext(instr & 0x7FF, 11);
+        reg[R_PC] += long_pc_offset;  /* JSR */
+    }
+    else
+    {
+        uint16_t r1 = (instr >> 6) & 0x7;
+        reg[R_PC] = reg[r1]; /* JSRR */
+    }
+}
+
+
+void ld(uint16_t instr)
+{
+    uint16_t r0 = (instr >> 9) & 0x7;
+    uint16_t pc_offset = sext(instr & 0x1FF, 9);
+    reg[r0] = mem_read(reg[R_PC] + pc_offset);
+    update_flags(r0);
+}
+
+
+void ldr(uint16_t instr)
+{
+    uint16_t r0 = (instr >> 9) & 0x7;
+    uint16_t r1 = (instr >> 6) & 0x7;
+    uint16_t offset = sext(instr & 0x3F, 6);
+    reg[r0] = mem_read(reg[r1] + offset);
+    update_flags(r0);
+}
+
+
+void lea(uint16_t instr)
+{
+    uint16_t r0 = (instr >> 9) & 0x7;
+    uint16_t pc_offset = sext(instr & 0x1FF, 9);
+    reg[r0] = reg[R_PC] + pc_offset;
+    update_flags(r0);
+}
+
+
+void st(uint16_t instr)
+{
+    uint16_t r0 = (instr >> 9) & 0x7;
+    uint16_t pc_offset = sext(instr & 0x1FF, 9);
+    mem_write(reg[R_PC] + pc_offset, reg[r0]);
+}
+
+
+void sti(uint16_t instr)
+{
+    uint16_t r0 = (instr >> 9) & 0x7;
+    uint16_t pc_offset = sext(instr & 0x1FF, 9);
+    mem_write(mem_read(reg[R_PC] + pc_offset), reg[r0]);
+}
+
+
+void str(uint16_t instr)
+{
+    uint16_t r0 = (instr >> 9) & 0x7;
+    uint16_t r1 = (instr >> 6) & 0x7;
+    uint16_t offset = sext(instr & 0x3F, 6);
+    mem_write(reg[r1] + offset, reg[r0]);
+}
+
+
+void rti(uint16_t instr)
+{
+    printf("Not to be used: %s\n", __func__);
+    abort();
+}
+
+
+void res(uint16_t instr)
+{
+    printf("Not to be used: %s\n", __func__);
+    abort();
 }
 
 
@@ -250,6 +353,18 @@ void trap_out()
 }
 
 
+// takes single char as input and spits it out back
+void trap_in()
+{
+    char c = getchar();
+    putc(c, stdout);
+    fflush(stdout);
+    reg[R_R0] = (uint16_t) c;
+
+    update_flags(R_R0);
+}
+
+
 typedef struct
 {
 	char *name;
@@ -260,7 +375,9 @@ typedef struct
 Trap_Def trap_lookup_table[TRAP_COUNT] = {
 	[TRAP_GETC % 0x20] = {.name = "getc", .trap_handler = trap_getc},
 	[TRAP_PUTS % 0x20] = {.name = "puts", .trap_handler = trap_puts},
+    [TRAP_PUTSP % 0x20] = {.name = "putsp", .trap_handler = trap_putsp},
 	[TRAP_OUT % 0x20] = {.name = "out", .trap_handler = trap_out},
+    [TRAP_IN % 0x20] = {.name = "in", .trap_handler = trap_in}
 };
 
 
@@ -279,8 +396,20 @@ typedef struct
 Instr_Def instr_lookup_table[OP_COUNT] = 
 {
     [OP_ADD] = {.name = "add", .function = add},
+    [OP_AND] = {.name = "and", .function = and},
+    [OP_NOT] = {.name = "not", .function = not},
+    [OP_BR] = {.name = "br", .function = br},
+    [OP_JMP] = {.name = "jmp", .function = jmp},
+    [OP_JSR] = {.name = "jsr", .function = jsr},
+    [OP_ST] = {.name = "st", .function = st},
+    [OP_STI] = {.name = "sti", .function = sti},
+    [OP_STR] = {.name = "str", .function = str},
     [OP_LDI] = {.name = "ldi", .function = ldi},
-    [OP_AND] = {.name = "and", .function = and}
+    [OP_LDR] = {.name = "ldr", .function = ldr},
+    [OP_LEA] = {.name = "lea", .function = lea},
+    [OP_LD] = {.name = "ld", .function = ld},
+    [OP_RES] = {.name = "res", .function = res},
+    [OP_RTI] = {.name = "rti", .function = rti}
 };
 
 
@@ -305,12 +434,10 @@ int main(void)
 	memory[0x400b] = '\n';
 	memory[0x400c] = '\0';
 
-	reg[R_R0] = 3;
+	reg[R_R0] = 0x4000;
 
-    memory[PC_START] = (OP_AND << 12) | (R_R0 << 9) | (R_R0 << 6) | (1 << 5) | 2; // and    
-    // memory[PC_START] = (OP_ADD << 12) | (R_R0 << 9) | (R_R0 << 6) | (1 << 5) | '0';
-    memory[PC_START + 1] = (0xF0 << 8) | TRAP_OUT;
-    memory[PC_START + 2] = (0xF0 << 8) | TRAP_HALT;
+    memory[PC_START] = (OP_TRAP << 12) | TRAP_IN;
+    memory[PC_START + 1] = (OP_TRAP << 12) | TRAP_HALT;
 
     uint8_t running = 1;
     while(running)
@@ -319,11 +446,9 @@ int main(void)
         uint16_t op = instr >> 12;
 
         // if instruction is a trap
-        if((instr & 0xF000) == 0xF000)
+        if(op == OP_TRAP)
         {
-            uint16_t trap_code = (instr & 0xFF);
-            // printf("Trap: %s | Trapcode: %d\n", trap_lookup_table[trap_code % 0x20].name, op);
-            
+            uint16_t trap_code = (instr & 0xFF);       
             if(trap_code == TRAP_HALT)
             {
                 puts("[HALT]");
@@ -335,10 +460,7 @@ int main(void)
         }
         // if instruction is opcode 
         else
-        {
-            // printf("Name: %s | Opcode: %d\n", instr_lookup_table[op].name, op);
             instr_lookup_table[op].function(instr);
-        }
     }
     return 0;
 }
