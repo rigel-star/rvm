@@ -349,7 +349,7 @@ void trap_getc()
 void trap_out()
 {
 	putc((char) reg[R_R0], stdout);
-    fflush(stdout);
+  fflush(stdout);
 }
 
 
@@ -375,9 +375,9 @@ typedef struct
 Trap_Def trap_lookup_table[TRAP_COUNT] = {
 	[TRAP_GETC % 0x20] = {.name = "getc", .trap_handler = trap_getc},
 	[TRAP_PUTS % 0x20] = {.name = "puts", .trap_handler = trap_puts},
-    [TRAP_PUTSP % 0x20] = {.name = "putsp", .trap_handler = trap_putsp},
+  [TRAP_PUTSP % 0x20] = {.name = "putsp", .trap_handler = trap_putsp},
 	[TRAP_OUT % 0x20] = {.name = "out", .trap_handler = trap_out},
-    [TRAP_IN % 0x20] = {.name = "in", .trap_handler = trap_in}
+  [TRAP_IN % 0x20] = {.name = "in", .trap_handler = trap_in}
 };
 
 
@@ -419,22 +419,6 @@ int main(void)
 
     enum { PC_START = 0x3000 };
     reg[R_PC] = PC_START;
-
-	memory[0x4000] = 'H';
-	memory[0x4001] = 'e';
-	memory[0x4002] = 'l';
-	memory[0x4003] = 'l';
-	memory[0x4004] = 'o';
-	memory[0x4005] = ' ';
-	memory[0x4006] = 'w';
-	memory[0x4007] = 'o';
-	memory[0x4008] = 'r';
-	memory[0x4009] = 'l';
-	memory[0x400a] = 'd';
-	memory[0x400b] = '\n';
-	memory[0x400c] = '\0';
-
-	reg[R_R0] = 0x4000;
 
     memory[PC_START] = (OP_TRAP << 12) | TRAP_IN;
     memory[PC_START + 1] = (OP_TRAP << 12) | TRAP_HALT;
